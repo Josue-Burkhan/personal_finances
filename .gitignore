@@ -9,11 +9,6 @@ build/
 **/build/
 
 # Database files
-*.sqlite
-*.sqlite-wal
-*.sqlite-shm
-*.sqlite-journal
-backend/data/*.sqlite
 
 # Environment variables
 .env
