@@ -12,7 +12,7 @@ import { CURRENCIES } from './constants/finance';
 
 export default function App() {
   const [currentMonth, setCurrentMonth] = useState('2026-08');
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, percent_control, budget, transactions
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, budget, transactions, percent_control
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -220,9 +220,9 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f4f7f6] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-teal-800 text-sm font-extrabold">
-          <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#f4f8f9] dark:bg-[#090d16] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-cyan-600 dark:text-cyan-400 text-sm font-extrabold">
+          <div className="w-8 h-8 border-3 border-cyan-600 border-t-transparent rounded-full animate-spin" />
           <span>Cargando datos...</span>
         </div>
       </div>
@@ -263,6 +263,7 @@ export default function App() {
           onQuickAddTransaction={(ruleWithPending) =>
             handleOpenQuickAddModal(ruleWithPending, ruleWithPending.pendingAmount)
           }
+          currentBudget={currentBudget}
         />
       )}
 

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Icons } from './Icons';
 import { Transaction, AllocationRule, Currency } from '../types/finance';
 import { CATEGORY_PALETTE, DEFAULT_INCOME_CATEGORIES } from '../constants/finance';
+import { DonutChart, DonutItem } from './common/DonutChart';
 
 interface DashboardViewProps {
   monthTransactions: Transaction[];
@@ -15,6 +16,10 @@ interface DashboardViewProps {
   selectedCurrency: Currency;
   setActiveTab: (tab: string) => void;
   onQuickAddTransaction: (rule: AllocationRule & { pendingAmount: number }) => void;
+  currentBudget?: {
+    income?: Record<string, number>;
+    expense?: Record<string, number>;
+  };
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -28,10 +33,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   allocationRules,
   selectedCurrency,
   setActiveTab,
-  onQuickAddTransaction
+  onQuickAddTransaction,
+  currentBudget
 }) => {
-  // Expense breakdown for Donut Chart
-  const expenseBreakdown = useMemo(() => {
+  // 1. Actual Expense Breakdown Items for Donut Chart
+  const expenseBreakdown = useMemo<DonutItem[]>(() => {
     const map: Record<string, number> = {};
     monthTransactions
       .filter((t) => t.type === 'expense')
@@ -52,6 +58,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .sort((a, b) => b.value - a.value);
   }, [monthTransactions]);
 
+  // 2. Planned Budget Breakdown Items for Second Donut Chart
+  const budgetBreakdown = useMemo<DonutItem[]>(() => {
+    const expensePlan = currentBudget?.expense || {};
+    const items: DonutItem[] = [];
+
+    Object.entries(expensePlan).forEach(([name, val]) => {
+      const num = Number(val || 0);
+      if (num > 0) {
+        const paletteObj = CATEGORY_PALETTE.find((c) => c.name === name);
+        items.push({
+          name,
+          value: num,
+          color: paletteObj ? paletteObj.color : '#0891b2',
+          icon: paletteObj ? paletteObj.icon : '📌'
+        });
+      }
+    });
+
+    // Unassigned income margin (money planned as income that has not been assigned to expense categories)
+    const unassigned = Math.max(0, totalPlannedIncome - totalPlannedExpense);
+    if (unassigned > 0) {
+      items.push({
+        name: 'Sin Asignar / Margen Libre',
+        value: unassigned,
+        color: '#64748b',
+        icon: '💡'
+      });
+    }
+
+    return items.sort((a, b) => b.value - a.value);
+  }, [currentBudget, totalPlannedIncome, totalPlannedExpense]);
+
+  const totalBudgetBase = Math.max(totalPlannedIncome, totalPlannedExpense);
+
   // Allocation Rules summary
   const allocationsSummary = useMemo(() => {
     return allocationRules.map((rule) => {
@@ -70,100 +110,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   }, [allocationRules, totalActualIncome, monthTransactions]);
 
-  const renderAppleDonutChart = () => {
-    if (totalActualExpense === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-52 text-slate-400 dark:text-slate-500 text-xs font-semibold">
-          <Icons.PieChart className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-          <span>Sin gastos registrados en este período</span>
-        </div>
-      );
-    }
-
-    let cumulativeAngle = 0;
-    const slices = expenseBreakdown.map((item) => {
-      const percentage = item.value / totalActualExpense;
-      const angle = percentage * 360;
-      const startAngle = cumulativeAngle;
-      cumulativeAngle += angle;
-
-      const x1 = 50 + 40 * Math.cos((Math.PI * (startAngle - 90)) / 180);
-      const y1 = 50 + 40 * Math.sin((Math.PI * (startAngle - 90)) / 180);
-      const x2 = 50 + 40 * Math.cos((Math.PI * (cumulativeAngle - 90)) / 180);
-      const y2 = 50 + 40 * Math.sin((Math.PI * (cumulativeAngle - 90)) / 180);
-
-      const largeArcFlag = angle > 180 ? 1 : 0;
-      const pathData =
-        angle === 360
-          ? `M 50,10 A 40,40 0 1,1 49.99,10 Z`
-          : `M ${x1} ${y1} A 40 40 0 ${largeArcFlag} 1 ${x2} ${y2}`;
-
-      return {
-        ...item,
-        percentage: (percentage * 100).toFixed(1),
-        pathData
-      };
-    });
-
-    return (
-      <div className="flex flex-col md:flex-row items-center gap-6">
-        <div className="relative w-48 h-48 flex items-center justify-center flex-shrink-0">
-          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-            {slices.map((slice, i) => (
-              <path
-                key={i}
-                d={slice.pathData}
-                fill="none"
-                stroke={slice.color}
-                strokeWidth="14"
-                className="transition-all duration-300 hover:opacity-80 cursor-pointer stroke-linecap-round"
-              />
-            ))}
-          </svg>
-          <div className="absolute flex flex-col items-center text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
-              Gastos Totales
-            </span>
-            <span className="text-lg font-extrabold text-slate-900 dark:text-white">
-              {selectedCurrency.symbol}
-              {totalActualExpense.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex-1 w-full space-y-2 max-h-56 overflow-y-auto pr-1">
-          {slices.map((item, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between text-xs p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 transition shadow-2xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                <span className="text-slate-800 dark:text-slate-200 font-semibold">
-                  {item.icon} {item.name}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-                <span>
-                  {selectedCurrency.symbol}
-                  {item.value.toFixed(2)}
-                </span>
-                <span className="text-[10px] text-cyan-800 dark:text-cyan-300 bg-cyan-100/80 dark:bg-cyan-950/60 px-2 py-0.5 rounded-full font-bold">
-                  {item.percentage}%
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-6">
       {/* SECTION 1: TOP KPI CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Income Card (Emerald Positive) */}
+        {/* Income Card */}
         <div className="glass-card p-5 rounded-3xl transition-all hover:shadow-md">
           <div className="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-2">
             <span>INGRESOS REALES</span>
@@ -183,7 +134,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Expense Card (Crimson Rose Negative) */}
+        {/* Expense Card */}
         <div className="glass-card p-5 rounded-3xl transition-all hover:shadow-md">
           <div className="flex items-center justify-between text-xs font-bold text-rose-800 dark:text-rose-400 mb-2">
             <span>GASTOS TOTALES</span>
@@ -207,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Balance Card (Sky/Ice Cyan Accent) */}
+        {/* Balance Card */}
         <div className="glass-card p-5 rounded-3xl transition-all hover:shadow-md">
           <div className="flex items-center justify-between text-xs font-bold text-cyan-800 dark:text-cyan-400 mb-2">
             <span>AHORRO / DISPONIBLE</span>
@@ -257,23 +208,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* SECTION 2: CHARTS & SUMMARY */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols): Donut & Expectation Bars */}
+        {/* Left Column (2 Cols): 2 Donut Charts (Actual Expenses + Planned Budget) & Expectation Bars */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="glass-card p-6 rounded-3xl shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Icons.PieChart className="text-cyan-600 dark:text-cyan-400" />
-                  Distribución de Gastos por Categoría
-                </h2>
-              </div>
-              <span className="text-xs font-bold bg-cyan-100/80 dark:bg-cyan-950/80 text-cyan-800 dark:text-cyan-300 px-3 py-1 rounded-full">
-                {expenseBreakdown.length} categorías
-              </span>
-            </div>
+          {/* DONUT CHART 1: Actual Expenses by Category */}
+          <DonutChart
+            title="Distribución de Gastos por Categoría"
+            badgeText={`${expenseBreakdown.length} categorías`}
+            totalLabel="Gastos Totales"
+            totalAmount={totalActualExpense}
+            items={expenseBreakdown}
+            currencySymbol={selectedCurrency.symbol}
+            emptyMessage="Sin gastos registrados en este período"
+          />
 
-            {renderAppleDonutChart()}
-          </div>
+          {/* DONUT CHART 2: Planned Budget Distribution (Assigned vs Unassigned) */}
+          <DonutChart
+            title="Distribución del Presupuesto (Planificado)"
+            badgeText={`${budgetBreakdown.length} bloques`}
+            totalLabel="Presupuesto Base"
+            totalAmount={totalBudgetBase}
+            items={budgetBreakdown}
+            currencySymbol={selectedCurrency.symbol}
+            emptyMessage="Sin presupuesto configurado para este mes"
+          />
 
           {/* Expectation vs Reality Comparison Bars */}
           <div className="glass-card p-6 rounded-3xl shadow-xs space-y-5">
